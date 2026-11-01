@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rehab AI - Physical Rehabilitation Platform</title>
+  <meta name="description" content="At-home physical therapy monitoring and prescription engine powered by Pose Estimation.">
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- CSS -->
+  <link rel="stylesheet" href="styles.css">
+  
+  <!-- Dependencies: Firebase Compat -->
+  <script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  
+  <!-- Dependencies: Chart.js for Doctor Metrics -->
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Dependencies: MediaPipe Pose & Camera Utilities -->
+  <script defer src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+  
+  <!-- Core Logic -->
+  <script defer src="app.js"></script>
+</head>
+<body>
+
+  <!-- Login Page Wrapper -->
+  <div id="login-container" class="login-page-wrapper">
+    <div class="login-card glass-card">
+      <div class="login-logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15h-2v4h-4v-8h-2v12H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"></path><polyline points="14 3 14 11 18 11 18 3"></polyline></svg>
+        </div>
+        <div class="logo-text">
+          <h2>Rehab AI</h2>
+          <span>MOVE TO HEAL</span>
+        </div>
+      </div>
+
+      <nav class="login-role-tabs">
+        <button id="login-tab-patient" class="login-tab active" onclick="app.switchLoginRole('patient')">Patient Login</button>
+        <button id="login-tab-doctor" class="login-tab" onclick="app.switchLoginRole('doctor')">Clinician Login</button>
+      </nav>
+
+      <form id="form-login" onsubmit="app.handleLogin(event)" class="login-form">
+        <div class="form-group">
+          <label for="login-email">Gmail / Email Address</label>
+          <input type="email" id="login-email" required placeholder="yourname@gmail.com">
+        </div>
+
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" required placeholder="Enter any password">
+        </div>
+
+        <div id="login-error-msg" class="error-banner" style="display: none;"></div>
+
+        <button type="submit" class="btn btn-primary btn-block">Authenticate Session</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- App Shell -->
+  <div id="app-shell" class="app-container" style="display: none;">
+    
+    <!-- Top Global Header -->
+    <header class="app-header">
+      <div class="header-logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15h-2v4h-4v-8h-2v12H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"></path><polyline points="14 3 14 11 18 11 18 3"></polyline></svg>
+        </div>
+        <div class="logo-text">
+          <h1>Rehab AI</h1>
+          <span>MOVE TO HEAL</span>
+        </div>
+      </div>
+      
+      <div class="header-controls">
+        <div id="db-status-badge" class="badge status-local" onclick="app.toggleSettingsModal()">
+          <span class="badge-dot"></span>
+          <span class="badge-text">Local Simulator Mode</span>
+        </div>
+        
+        <nav id="header-role-selector" class="role-selector">
+          <button id="btn-patient-mode" class="role-btn active" onclick="app.switchRole('patient')">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            Patient Portal
+          </button>
+          <button id="btn-doctor-mode" class="role-btn" onclick="app.switchRole('doctor')">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+            Clinician Dashboard
+          </button>
+        </nav>
+
+        <button id="btn-sign-out" class="btn btn-secondary-sm" onclick="app.signOut()">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          Sign Out
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="app-main">
+      
+      <!-- ================= PATIENT INTERFACE ================= -->
+      <section id="patient-interface" class="portal-section active">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+          <nav class="sidebar-nav">
+            <button class="nav-item active" data-tab="patient-dashboard" onclick="app.switchPatientTab('patient-dashboard')">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></nav>
+              Dashboard
+            </button>
+            <button class="nav-item" data-tab="patient-workout" onclick="app.switchPatientTab('patient-workout')">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              Workout Hub
+            </button>
+            <button class="nav-item" data-tab="patient-edu" onclick="app.switchPatientTab('patient-edu')">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+              Guides & Library
+            </button>
+            <button class="nav-item" onclick="app.toggleSettingsModal()">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              Cloud Settings
+            </button>
+          </nav>
+          
+          <div id="patient-active-card" class="sidebar-patient-info">
+            <span class="lbl">Active Patient</span>
+            <div class="user-picker">
+              <select id="select-active-patient" onchange="app.changeActivePatient(this.value)">
+                <!-- populated by JS -->
+              </select>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Main Content for Patient Tab -->
+        <div class="content-pane">
+          
+          <!-- Patient Tab 1: Dashboard -->
+          <div id="tab-patient-dashboard" class="patient-tab-content active">
+            <div class="dashboard-grid">
+              
+              <!-- Left Column: Primary details -->
+              <div class="grid-main-col">
+                <div class="welcome-banner">
+                  <div class="welcome-text">
+                    <h2 class="section-title">Hello, <span id="span-patient-name">Patient</span></h2>
+                    <p class="subtitle">Welcome to your rehabilitation workspace. Keep up the great work in your recovery journey!</p>
+                  </div>
+                  <div class="compliance-circle-container">
+                    <div class="progress-ring-box">
+                      <svg class="progress-ring" width="80" height="80">
+                        <circle class="progress-ring-bg" stroke="rgba(255,255,255,0.08)" stroke-width="8" fill="transparent" r="32" cx="40" cy="40"/>
+                        <circle id="compliance-ring-val" class="progress-ring-fill" stroke="var(--emerald)" stroke-width="8" stroke-dasharray="201" stroke-dashoffset="201" fill="transparent" r="32" cx="40" cy="40"/>
+                      </svg>
+                      <div class="progress-ring-text"><span id="span-compliance-pct">0</span>%</div>
+                    </div>
+                    <div class="compliance-label">Weekly Compliance</div>
+                  </div>
+                </div>
+
+                <!-- Alert Board (Messages from Doctor) -->
+                <div class="card glass-card messages-card">
+                  <div class="card-header">
+                    <h3>Clinical Alerts & Reminders</h3>
+                    <span class="card-icon-pill">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                    </span>
+                  </div>
+                  <div id="patient-reminders-list" class="reminders-list">
+                    <!-- populated dynamically -->
+                  </div>
+                </div>
+
+                <!-- Assigned Workouts Checklist -->
+                <div class="card glass-card prescriptions-card">
+                  <div class="card-header">
+                    <h3>Assigned Tasks & Prescriptions</h3>
+                    <span class="badge badge-accent">Today's Goals</span>
+                  </div>
+                  <div id="patient-prescribed-list" class="prescribed-grid">
+                    <!-- populated dynamically -->
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right Column: Quick History & Stats -->
+              <div class="grid-side-col">
+                <div class="card glass-card quick-stats-card">
+                  <div class="card-header">
+                    <h3>Recovery Stats</h3>
+                  </div>
+                  <div class="quick-stats-grid">
+                    <div class="stat-item">
+                      <div class="stat-lbl">Workouts Completed</div>
+                      <div id="stat-completed-count" class="stat-val">0</div>
+                    </div>
+                    <div class="stat-item">
+                      <div class="stat-lbl">Average Accuracy</div>
+                      <div id="stat-avg-accuracy" class="stat-val">0%</div>
+                    </div>
+                    <div class="stat-item">
+                      <div class="stat-lbl">Time Active</div>
+                      <div id="stat-active-mins" class="stat-val">0m</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card glass-card history-card">
+                  <div class="card-header">
+                    <h3>Workout History</h3>
+                  </div>
+                  <div id="patient-history-list" class="history-list scrollable">
+                    <!-- populated dynamically -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Patient Tab 2: Workout Hub -->
+          <div id="tab-patient-workout" class="patient-tab-content">
+            <div id="workout-init-screen" class="workout-setup-screen">
+              <div class="setup-hero">
+                <div class="setup-icon-box">
+                  <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+                </div>
+                <h2>Start Your Rehabilitation Session</h2>
+                <p>Select an exercise from your prescribed tasks below to begin real-time pose tracking.</p>
+              </div>
+              
+              <div class="setup-exercise-grid" id="setup-exercise-selector">
+                <!-- populated dynamically -->
+              </div>
+            </div>
+
+            <!-- Active Workout Board (Hidden by default) -->
+            <div id="workout-active-screen" class="workout-workspace-grid" style="display: none;">
+              
+              <!-- Left panel: Camera and overlays -->
+              <div class="workout-camera-panel">
+                <div class="workout-panel-header">
+                  <h3 id="workout-current-title">Bicep Curl</h3>
+                  <div class="workout-panel-controls">
+                    <label class="switch-container">
+                      <input type="checkbox" id="toggle-overlay" checked onchange="app.toggleOverlay(this.checked)">
+                      <span class="slider"></span>
+                      <span class="switch-label">Pose Overlay</span>
+                    </label>
+                    <button class="btn btn-secondary-sm" onclick="app.toggleCameraMode()">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                      <span id="txt-cam-mode">Switch to Webcam</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="camera-canvas-container">
+                  <!-- Real Video Feed -->
+                  <video id="webcam-video" style="display: none;" playsinline></video>
+                  
+                  <!-- Canvas Overlay -->
+                  <canvas id="overlay-canvas"></canvas>
+                  
+                  <!-- Simulation Display Overlay -->
+                  <div id="simulation-video-overlay" class="simulation-screen">
+                    <div class="sim-watermark">MOTION SIMULATION ACTIVE</div>
+                    <div class="sim-graphics-box">
+                      <!-- Drawn dynamically -->
+                    </div>
+                  </div>
+                  
+                  <div id="camera-loading-spinner" class="camera-spinner" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Configuring MediaPipe Pose...</p>
+                  </div>
+                </div>
+
+                <div class="workout-panel-footer">
+                  <div class="instruction-box">
+                    <span class="inst-lbl">Current Cue:</span>
+                    <p id="workout-cue-box" class="inst-val">Stand clear of the camera to calibrate skeleton</p>
+                  </div>
+                  <div class="workout-action-buttons">
+                    <button class="btn btn-danger" onclick="app.abortWorkout()">Abort</button>
+                    <button id="btn-complete-workout" class="btn btn-success" onclick="app.completeWorkout()">Save Session</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right panel: AI LSTM evaluation matrix & stats -->
+              <div class="workout-stats-panel">
+                
+                <!-- Large counters -->
+                <div class="rep-counter-box glass-card">
+                  <div class="counter-head">REP COUNT</div>
+                  <div id="workout-reps-val" class="counter-val">0</div>
+                  <div class="counter-sub">Target: <span id="workout-target-reps">10</span></div>
+                </div>
+
+                <!-- Bio-mechanical Angles -->
+                <div class="card glass-card stat-metric-card">
+                  <div class="card-header">
+                    <h3>Joint Angles</h3>
+                  </div>
+                  <div class="joint-angles-box">
+                    <div class="angle-progress-row">
+                      <span id="joint-angle-lbl-1" class="joint-label">Elbow Angle</span>
+                      <div class="progress-bar-bg">
+                        <div id="joint-angle-bar-1" class="progress-bar-fill accent" style="width: 0%;"></div>
+                      </div>
+                      <span id="joint-angle-val-1" class="joint-val">0°</span>
+                    </div>
+                    <div class="angle-progress-row" id="joint-angle-row-2" style="display: none;">
+                      <span id="joint-angle-lbl-2" class="joint-label">Shoulder Angle</span>
+                      <div class="progress-bar-bg">
+                        <div id="joint-angle-bar-2" class="progress-bar-fill primary" style="width: 0%;"></div>
+                      </div>
+                      <span id="joint-angle-val-2" class="joint-val">0°</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- AI LSTM Analysis Panel -->
+                <div class="card glass-card lstm-analysis-card">
+                  <div class="card-header">
+                    <h3>LSTM Classifier (MATLAB 98% Acc)</h3>
+                    <span class="ai-status-pill">Active</span>
+                  </div>
+                  <div class="lstm-grid">
+                    
+                    <div class="accuracy-score-box">
+                      <div class="score-circle">
+                        <svg class="progress-ring" width="100" height="100">
+                          <circle class="progress-ring-bg" stroke="rgba(255,255,255,0.08)" stroke-width="8" fill="transparent" r="42" cx="50" cy="50"/>
+                          <circle id="workout-accuracy-ring" class="progress-ring-fill" stroke="var(--primary)" stroke-width="8" stroke-dasharray="264" stroke-dashoffset="264" fill="transparent" r="42" cx="50" cy="50"/>
+                        </svg>
+                        <div class="score-text"><span id="workout-accuracy-val">0</span>%</div>
+                      </div>
+                      <div class="score-lbl">Form Accuracy Score</div>
+                    </div>
+
+                    <div class="lstm-diagnostics">
+                      <div class="diag-row">
+                        <span class="diag-lbl">Current Phase:</span>
+                        <span id="workout-phase" class="diag-val accent-text">Stationary</span>
+                      </div>
+                      <div class="diag-row">
+                        <span class="diag-lbl">Form Check:</span>
+                        <span id="workout-form-check" class="diag-val green-text">Perfect Form</span>
+                      </div>
+                      <div class="diag-row">
+                        <span class="diag-lbl">Speed Rate:</span>
+                        <span id="workout-speed" class="diag-val">Stable (1.2s)</span>
+                      </div>
+                      <div class="diag-row">
+                        <span class="diag-lbl">Knee Stability:</span>
+                        <span id="workout-stability" class="diag-val">N/A</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- LSTM Time-series Buffer Monitor -->
+                  <div class="lstm-buffer-monitor">
+                    <span class="monitor-lbl">Rolling Sequence Angle Buffer (LSTM Input)</span>
+                    <div class="buffer-bar-visualizer" id="angle-buffer-bars">
+                      <!-- Dynamically added buffer bars -->
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+          
+          <!-- Patient Tab 3: Educational Library -->
+          <div id="tab-patient-edu" class="patient-tab-content">
+            <h2 class="section-title">Educational Resources & Guides</h2>
+            <p class="section-desc">Learn how to perform your assigned exercises safely to optimize your recovery and avoid injuries.</p>
+
+            <div class="edu-grid">
+              <!-- Squats Guide -->
+              <div class="card glass-card edu-card">
+                <div class="edu-video-sim">
+                  <!-- Animated SVG representing squats -->
+                  <svg viewBox="0 0 100 120" class="edu-animation">
+                    <!-- Background Grid -->
+                    <line x1="10" y1="110" x2="90" y2="110" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+                    <!-- Squat Person Animation -->
+                    <g class="squat-anim-group">
+                      <circle cx="50" cy="30" r="8" fill="var(--primary)" class="head"/>
+                      <line x1="50" y1="38" x2="50" y2="70" stroke="var(--foreground)" stroke-width="4" class="torso"/>
+                      <line x1="50" y1="70" x2="35" y2="90" stroke="var(--foreground)" stroke-width="4" class="thigh"/>
+                      <line x1="35" y1="90" x2="50" y2="110" stroke="var(--foreground)" stroke-width="4" class="calf"/>
+                      <line x1="50" y1="38" x2="65" y2="60" stroke="var(--foreground)" stroke-width="3" class="arm"/>
+                    </g>
+                  </svg>
+                  <div class="edu-badge">Squat</div>
+                </div>
+                <div class="edu-body">
+                  <h3>Bodyweight Squat</h3>
+                  <p>Target: Lower Body (Quadriceps, Gluteals, Knee Stability)</p>
+                  <ul class="edu-steps">
+                    <li>Stand with feet shoulder-width apart, toes pointing slightly outward.</li>
+                    <li>Lower your hips back and down as if sitting in an imaginary chair.</li>
+                    <li>Keep your knees aligned with your toes; do not let them collapse inward (valgus).</li>
+                    <li>Lower until your thighs are parallel to the ground (knee angle around 90-100°).</li>
+                    <li>Push through your heels to return to the starting position.</li>
+                  </ul>
+                  <div class="edu-warning">
+                    <strong>Critical Guardrails:</strong> Do not arch your spine, and ensure knees do not bow inward.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Bicep Curl Guide -->
+              <div class="card glass-card edu-card">
+                <div class="edu-video-sim">
+                  <!-- Animated SVG representing bicep curl -->
+                  <svg viewBox="0 0 100 120" class="edu-animation">
+                    <line x1="10" y1="110" x2="90" y2="110" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+                    <g class="curl-anim-group">
+                      <circle cx="50" cy="30" r="8" fill="var(--primary)"/>
+                      <line x1="50" y1="38" x2="50" y2="85" stroke="var(--foreground)" stroke-width="4"/>
+                      <line x1="50" y1="85" x2="40" y2="110" stroke="var(--foreground)" stroke-width="4"/>
+                      <line x1="50" y1="85" x2="60" y2="110" stroke="var(--foreground)" stroke-width="4"/>
+                      <!-- Arm moving in curl -->
+                      <line x1="50" y1="42" x2="50" y2="65" stroke="var(--foreground)" stroke-width="4" class="upper-arm"/>
+                      <line x1="50" y1="65" x2="65" y2="55" stroke="var(--foreground)" stroke-width="4" class="forearm-curl"/>
+                    </g>
+                  </svg>
+                  <div class="edu-badge">Bicep Curl</div>
+                </div>
+                <div class="edu-body">
+                  <h3>Bicep Curl</h3>
+                  <p>Target: Upper Body (Elbow Flexion, Bicep Brachii)</p>
+                  <ul class="edu-steps">
+                    <li>Stand tall with a dumbbell in each hand, palms facing forward.</li>
+                    <li>Keep your elbows close to your torso at all times.</li>
+                    <li>Curl the weights upward while contracting your biceps.</li>
+                    <li>Continue raising until biceps are fully contracted (elbow angle near 30-40°).</li>
+                    <li>Slowly lower the weights back to the starting position (full extension, 170-180°).</li>
+                  </ul>
+                  <div class="edu-warning">
+                    <strong>Critical Guardrails:</strong> Do not swing your body or rely on momentum. Keep upper arms stationary.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Shoulder Press Guide -->
+              <div class="card glass-card edu-card">
+                <div class="edu-video-sim">
+                  <svg viewBox="0 0 100 120" class="edu-animation">
+                    <line x1="10" y1="110" x2="90" y2="110" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+                    <g class="press-anim-group">
+                      <circle cx="50" cy="30" r="8" fill="var(--primary)"/>
+                      <line x1="50" y1="38" x2="50" y2="85" stroke="var(--foreground)" stroke-width="4"/>
+                      <line x1="50" y1="85" x2="40" y2="110" stroke="var(--foreground)" stroke-width="4"/>
+                      <line x1="50" y1="85" x2="60" y2="110" stroke="var(--foreground)" stroke-width="4"/>
+                      <!-- Shoulders & Arms -->
+                      <line x1="38" y1="42" x2="62" y2="42" stroke="var(--foreground)" stroke-width="4" class="shoulders"/>
+                      <line x1="38" y1="42" x2="38" y2="55" stroke="var(--foreground)" stroke-width="3" class="left-arm-1"/>
+                      <line x1="38" y1="55" x2="32" y2="35" stroke="var(--foreground)" stroke-width="3" class="left-arm-2"/>
+                      <line x1="62" y1="42" x2="62" y2="55" stroke="var(--foreground)" stroke-width="3" class="right-arm-1"/>
+                      <line x1="62" y1="55" x2="68" y2="35" stroke="var(--foreground)" stroke-width="3" class="right-arm-2"/>
+                    </g>
+                  </svg>
+                  <div class="edu-badge">Shoulder Press</div>
+                </div>
+                <div class="edu-body">
+                  <h3>Shoulder Press</h3>
+                  <p>Target: Deltoids, Rotator Cuff, Upper Elbow Extension</p>
+                  <ul class="edu-steps">
+                    <li>Stand with feet shoulder-width apart, holding weights at shoulder level.</li>
+                    <li>Engage your core and keep your chest upright.</li>
+                    <li>Press the weights straight up above your head until arms are fully extended.</li>
+                    <li>Lower the weights back down slowly, keeping elbows in front of body.</li>
+                  </ul>
+                  <div class="edu-warning">
+                    <strong>Critical Guardrails:</strong> Do not arch your lower back. Control the descent weight.
+                  </div>
+                </div>
+              </div>
+              <!-- Lunge Guide -->
+              <div class="card glass-card edu-card">
+                <div class="edu-video-sim">
+                  <svg viewBox="0 0 100 120" class="edu-animation">
+                    <line x1="10" y1="110" x2="90" y2="110" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+                    <g class="lunge-anim-group">
+                      <circle cx="45" cy="30" r="8" fill="var(--primary)" class="head"/>
+                      <line x1="45" y1="38" x2="45" y2="70" stroke="var(--foreground)" stroke-width="4" class="torso"/>
+                      <line x1="45" y1="70" x2="60" y2="85" stroke="var(--foreground)" stroke-width="4" class="front-thigh"/>
+                      <line x1="60" y1="85" x2="60" y2="110" stroke="var(--foreground)" stroke-width="4" class="front-calf"/>
+                      <line x1="45" y1="70" x2="25" y2="90" stroke="var(--foreground)" stroke-width="4" class="back-thigh"/>
+                      <line x1="25" y1="90" x2="35" y2="110" stroke="var(--foreground)" stroke-width="4" class="back-calf"/>
+                    </g>
+                  </svg>
+                  <div class="edu-badge">Lunge</div>
+                </div>
+                <div class="edu-body">
+                  <h3>Forward Lunge</h3>
+                  <p>Target: Lower Body (Quadriceps, Gluteals, Hip Flexors, Alignment)</p>
+                  <ul class="edu-steps">
+                    <li>Step forward with one leg, keeping your torso vertical.</li>
+                    <li>Lower your body until your rear knee is close to the floor.</li>
+                    <li>Ensure your front knee does not pass past your toes.</li>
+                    <li>Keep your hips level and stable throughout the motion.</li>
+                    <li>Push back up with your front leg to return to standing.</li>
+                  </ul>
+                  <div class="edu-warning">
+                    <strong>Critical Guardrails:</strong> Maintain core stability. Avoid torso leaning too far forward.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Lateral Raise Guide -->
+              <div class="card glass-card edu-card">
+                <div class="edu-video-sim">
+                  <svg viewBox="0 0 100 120" class="edu-animation">
+                    <line x1="10" y1="110" x2="90" y2="110" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+                    <g class="raise-anim-group">
+                      <circle cx="50" cy="30" r="8" fill="var(--primary)"/>
+                      <line x1="50" y1="38" x2="50" y2="85" stroke="var(--foreground)" stroke-width="4"/>
+                      <line x1="50" y1="85" x2="40" y2="110" stroke="var(--foreground)" stroke-width="4"/>
+                      <line x1="50" y1="85" x2="60" y2="110" stroke="var(--foreground)" stroke-width="4"/>
+                      <line x1="50" y1="42" x2="32" y2="42" stroke="var(--foreground)" stroke-width="3.5" class="left-arm-raise"/>
+                      <line x1="50" y1="42" x2="68" y2="42" stroke="var(--foreground)" stroke-width="3.5" class="right-arm-raise"/>
+                    </g>
+                  </svg>
+                  <div class="edu-badge">Lateral Raise</div>
+                </div>
+                <div class="edu-body">
+                  <h3>Lateral Shoulder Raise</h3>
+                  <p>Target: Deltoids, Rotator Cuff Abduction Strength</p>
+                  <ul class="edu-steps">
+                    <li>Stand tall with dumbbells at your sides, core engaged.</li>
+                    <li>Raise your arms out to the sides with a slight elbow bend.</li>
+                    <li>Stop once your arms are parallel to the floor (shoulder level, 90°).</li>
+                    <li>Slowly lower the weights back to the starting position.</li>
+                  </ul>
+                  <div class="edu-warning">
+                    <strong>Critical Guardrails:</strong> Do not raise arms above shoulder line. Control the speed.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Wall Sit Guide -->
+              <div class="card glass-card edu-card">
+                <div class="edu-video-sim">
+                  <!-- Animated SVG representing wall sit -->
+                  <svg viewBox="0 0 100 120" class="edu-animation">
+                    <!-- Wall Line -->
+                    <line x1="70" y1="10" x2="70" y2="110" stroke="rgba(255,255,255,0.2)" stroke-width="4"/>
+                    <!-- Floor Line -->
+                    <line x1="10" y1="110" x2="90" y2="110" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+                    <!-- Wall Sit Person Animation -->
+                    <g class="wallsit-anim-group">
+                      <circle cx="48" cy="32" r="8" fill="var(--primary)" class="head"/>
+                      <!-- Torso back against wall (vertical at x=58) -->
+                      <line x1="48" y1="40" x2="58" y2="40" stroke="var(--foreground)" stroke-width="4" class="neck"/>
+                      <line x1="58" y1="40" x2="58" y2="70" stroke="var(--foreground)" stroke-width="4" class="torso"/>
+                      <!-- Thigh parallel to ground (y=70) -->
+                      <line x1="58" y1="70" x2="38" y2="70" stroke="var(--foreground)" stroke-width="4" class="thigh"/>
+                      <!-- Shin perpendicular to ground (x=38) -->
+                      <line x1="38" y1="70" x2="38" y2="110" stroke="var(--foreground)" stroke-width="4" class="shin"/>
+                      <!-- Arm resting on thigh -->
+                      <line x1="48" y1="45" x2="48" y2="70" stroke="var(--foreground)" stroke-width="3" class="arm"/>
+                    </g>
+                  </svg>
+                  <div class="edu-badge">Wall Sit</div>
+                </div>
+                <div class="edu-body">
+                  <h3>Wall Sit</h3>
+                  <p>Target: Quadriceps, Glutes, Knee Stability, Endurance</p>
+                  <ul class="edu-steps">
+                    <li>Stand with your back against a wall.</li>
+                    <li>Slide down until knees reach approximately 90°.</li>
+                    <li>Keep knees aligned with toes.</li>
+                    <li>Maintain a neutral spine.</li>
+                    <li>Hold for 20–60 seconds.</li>
+                  </ul>
+                  <div class="edu-warning">
+                    <strong>Critical Guardrails:</strong> Do not let knees collapse inward. Keep lower back against the wall. Stop if knee pain occurs.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ================= DOCTOR INTERFACE ================= -->
+      <section id="doctor-interface" class="portal-section">
+        
+        <!-- Doctor Main grid -->
+        <div id="doctor-roster-view" class="doctor-workspace">
+          <div class="workspace-header">
+            <div>
+              <h2 class="section-title">Clinician Portal - Patient Roster</h2>
+              <p class="section-desc">Review at-home adherence, check biomechanical evaluations, and update tasks/reminders.</p>
+            </div>
+          </div>
+
+          <div class="card glass-card roster-card">
+            <div class="table-container">
+              <table class="roster-table">
+                <thead>
+                  <tr>
+                    <th>Patient Name</th>
+                    <th>Primary Condition</th>
+                    <th>Compliance</th>
+                    <th>Sessions Completed</th>
+                    <th>Avg Score</th>
+                    <th>Last Active</th>
+                    <th>Struggle Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="doctor-roster-tbody">
+                  <!-- Populated dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Doctor Patient Detailed View (Hidden by default, shown when viewing patient) -->
+        <div id="doctor-patient-detail-view" class="doctor-workspace" style="display: none;">
+          <div class="workspace-header-actions">
+            <button class="btn btn-secondary-sm" onclick="app.closePatientDetails()">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+              Back to Patient Roster
+            </button>
+            <h2 class="section-title">Patient Profile: <span id="detail-patient-name">Patient Name</span></h2>
+          </div>
+
+          <div class="detail-grid">
+            <!-- Left Side: Roster stats and trends chart -->
+            <div class="detail-main">
+              
+              <!-- Core Patient Demographics Card -->
+              <div class="card glass-card demographics-card">
+                <div class="demographics-grid">
+                  <div class="demo-item"><span class="lbl">Condition:</span><span id="detail-condition" class="val">ACL Repair</span></div>
+                  <div class="demo-item"><span class="lbl">Age/Gender:</span><span id="detail-age-gender" class="val">32 / M</span></div>
+                  <div class="demo-item"><span class="lbl">Join Date:</span><span id="detail-join-date" class="val">Jan 2026</span></div>
+                  <div class="demo-item"><span class="lbl">Compliance:</span><span id="detail-compliance-val" class="val">85%</span></div>
+                </div>
+              </div>
+
+              <!-- Compliance Over Time Chart -->
+              <div class="card glass-card chart-card">
+                <div class="card-header">
+                  <h3>Rehabilitation Progress Trend</h3>
+                  <span class="sub-lbl">Accuracy score & repetitions across historical runs</span>
+                </div>
+                <div class="chart-container">
+                  <canvas id="patient-progress-chart"></canvas>
+                </div>
+              </div>
+
+              <!-- List of previous workouts -->
+              <div class="card glass-card detail-history-card">
+                <div class="card-header">
+                  <h3>Recent Session Log</h3>
+                </div>
+                <div class="table-container">
+                  <table class="session-log-table">
+                    <thead>
+                      <tr>
+                        <th>Date & Time</th>
+                        <th>Exercise</th>
+                        <th>Reps Achieved</th>
+                        <th>Duration</th>
+                        <th>Avg Accuracy</th>
+                        <th>Critical Form Flags</th>
+                        <th>Recording</th>
+                      </tr>
+                    </thead>
+                    <tbody id="detail-workout-tbody">
+                      <!-- Populated dynamically -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Side: Reminders, presets and adjustments -->
+            <div class="detail-side">
+              
+              <!-- Struggle Flag Board -->
+              <div class="card glass-card struggle-flag-card">
+                <div class="card-header">
+                  <h3>Biomechanical Risk Analysis</h3>
+                </div>
+                <div id="detail-struggles-list" class="struggle-list">
+                  <!-- Populated dynamically -->
+                </div>
+              </div>
+
+              <!-- Task prescriber -->
+              <div class="card glass-card prescriber-card">
+                <div class="card-header">
+                  <h3>Assign Rehabilitation Prescription</h3>
+                </div>
+                <form id="form-prescription" class="doc-panel-form" onsubmit="app.savePrescription(event)">
+                  <div class="form-group">
+                    <label for="presc-exercise">Exercise Type</label>
+                    <select id="presc-exercise" required>
+                      <option value="Bicep Curl">Bicep Curl</option>
+                      <option value="Squat">Squat</option>
+                      <option value="Shoulder Press">Shoulder Press</option>
+                      <option value="Lunge">Lunge</option>
+                      <option value="Lateral Raise">Lateral Raise</option>
+                    </select>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group col-6">
+                      <label for="presc-reps">Target Reps</label>
+                      <input type="number" id="presc-reps" min="1" max="50" value="10" required>
+                    </div>
+                    <div class="form-group col-6">
+                      <label for="presc-sets">Sets</label>
+                      <input type="number" id="presc-sets" min="1" max="10" value="3" required>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label for="presc-freq">Target Frequency</label>
+                    <select id="presc-freq" required>
+                      <option value="Daily">Daily</option>
+                      <option value="Every other day">Every other day</option>
+                      <option value="3 times a week">3 times a week</option>
+                    </select>
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-block">Assign Prescribed Task</button>
+                </form>
+              </div>
+
+              <!-- Push Alerts / Reminders -->
+              <div class="card glass-card doc-alerts-card">
+                <div class="card-header">
+                  <h3>Send Clinical Reminder</h3>
+                </div>
+                <form id="form-reminder" class="doc-panel-form" onsubmit="app.saveReminder(event)">
+                  <div class="form-group">
+                    <label for="reminder-text">Clinical Instruction</label>
+                    <textarea id="reminder-text" placeholder="e.g., Please slow down on bicep extensions, and maintain a upright posture during squats." required></textarea>
+                  </div>
+                  <button type="submit" class="btn btn-secondary-block">Push Reminder Alert</button>
+                </form>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </main>
+
+    <!-- Cloud / Local Settings Drawer Modal -->
+    <div id="settings-modal" class="modal-overlay" style="display: none;">
+      <div class="modal-card glass-modal">
+        <div class="modal-header">
+          <h2>Cloud Database Configuration (Firebase)</h2>
+          <button class="close-btn" onclick="app.toggleSettingsModal()">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-description">Connect your local app with your Firebase Console. Under settings, configure Cloud Firestore to automatically enable cloud storage and real-time syncing between doctor and patient panels.</p>
+          
+          <div class="settings-db-toggle">
+            <label class="radio-label">
+              <input type="radio" name="db_connection_type" value="local" checked onchange="app.switchDatabaseType(this.value)">
+              <span class="custom-radio"></span>
+              <div>
+                <strong>Local Simulation Mode</strong>
+                <p>Stores exercises locally on your device (utilizes LocalStorage). Ideal for quick demonstrations.</p>
+              </div>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="db_connection_type" value="firebase" onchange="app.switchDatabaseType(this.value)">
+              <span class="custom-radio"></span>
+              <div>
+                <strong>Firebase Integration</strong>
+                <p>Connects to your Firestore instance for real-time remote syncing between patients and clinicians.</p>
+              </div>
+            </label>
+          </div>
+
+          <form id="form-firebase-config" onsubmit="app.saveFirebaseConfig(event)" style="display: none;">
+            <div class="form-group">
+              <label for="fb-apiKey">API Key</label>
+              <input type="password" id="fb-apiKey" required placeholder="AIzaSy...">
+            </div>
+            <div class="form-row">
+              <div class="form-group col-6">
+                <label for="fb-authDomain">Auth Domain</label>
+                <input type="text" id="fb-authDomain" required placeholder="project-id.firebaseapp.com">
+              </div>
+              <div class="form-group col-6">
+                <label for="fb-projectId">Project ID</label>
+                <input type="text" id="fb-projectId" required placeholder="project-id">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="fb-storageBucket">Storage Bucket</label>
+              <input type="text" id="fb-storageBucket" placeholder="project-id.appspot.com">
+            </div>
+            <div class="form-row">
+              <div class="form-group col-6">
+                <label for="fb-messagingSenderId">Messaging Sender ID</label>
+                <input type="text" id="fb-messagingSenderId" placeholder="1234567890">
+              </div>
+              <div class="form-group col-6">
+                <label for="fb-appId">App ID</label>
+                <input type="text" id="fb-appId" required placeholder="1:1234567890:web:abcdef...">
+              </div>
+            </div>
+            
+            <div id="firebase-connection-error" class="error-banner" style="display: none;">
+              <!-- Errors show here -->
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">Initialize and Save Connection</button>
+          </form>
+
+          <div id="settings-local-active" class="settings-info-box">
+            <span class="accent-text">✓ Local Simulation active.</span> Data persists locally in browser cache. Prescriptions and session updates will instantly copy between Patient and Doctor views in your browser.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Video Player Drawer Modal -->
+    <div id="video-modal" class="modal-overlay" style="display: none;">
+      <div class="modal-card glass-modal" style="width: 680px;">
+        <div class="modal-header">
+          <h2>Session Recording Playback</h2>
+          <button class="close-btn" onclick="app.closeVideoModal()">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+        <div class="modal-body" style="padding: 20px; display: flex; justify-content: center; align-items: center; background-color: #000;">
+          <video id="playback-video-player" width="100%" height="auto" controls playsinline></video>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
