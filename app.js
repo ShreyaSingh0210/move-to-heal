@@ -1484,15 +1484,22 @@ class RehabApp {
     }
   }
 
-  speak(text) {
-    if (!this.enableSpeech) return;
-    if (this.speechSynth.speaking) {
-      this.speechSynth.cancel();
+
+speak(text) {
+    if (!this.enableSpeech || !this.speechSynth ||
+        typeof SpeechSynthesisUtterance === 'undefined') {
+        return;
     }
+
+    if (this.speechSynth.speaking) {
+        this.speechSynth.cancel();
+    }
+
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.0;
     this.speechSynth.speak(utterance);
-  }
+}
+
 
   // ==========================================================================
   // Session End & Save Workout Logs
