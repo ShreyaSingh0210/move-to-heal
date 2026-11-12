@@ -101,11 +101,14 @@ http://localhost:8000
 npx serve .
 ```
 
-### Option 3: VS Code Live Server
-1. Open the project folder in **Visual Studio Code**.
-2. Right-click [`index.html`](file:///c:/Users/geeth/OneDrive/Desktop/MOVE%20TO%20HEAL/index.html) and click **"Open with Live Server"**.
 
----
+### Option 3: VS Code Live Server
+
+1. Open the project folder in **Visual Studio Code**.
+2. Install the **Live Server** extension if it is not already installed.
+3. Open `index.html` in the editor.
+4. Right-click inside the editor and select **"Open with Live Server"**.
+5. The application will open in your default browser.
 
 ## 🔑 Authentication & Test Profiles
 
