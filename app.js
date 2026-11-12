@@ -280,17 +280,28 @@ class RehabApp {
 
   setupRosterAndListeners() {
     // Populate Patient Select dropdown
-    const selectEl = document.getElementById('select-active-patient');
-    if (selectEl) {
-      selectEl.innerHTML = '';
-      this.patients.forEach(p => {
+
+const selectEl = document.getElementById('select-active-patient');
+
+// Select the first available patient if the current one does not exist
+if (this.patients.length > 0 &&
+    !this.patients.some(p => p.id === this.activePatientId)) {
+    this.activePatientId = this.patients[0].id;
+}
+
+if (selectEl) {
+    selectEl.innerHTML = '';
+
+    this.patients.forEach(p => {
         const opt = document.createElement('option');
         opt.value = p.id;
         opt.innerText = p.name;
         selectEl.appendChild(opt);
-      });
-      selectEl.value = this.activePatientId;
-    }
+    });
+
+    selectEl.value = this.activePatientId;
+}
+
     
     // Populate Login Select dropdown
     this.populateLoginSelector();
